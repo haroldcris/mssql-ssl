@@ -1,0 +1,55 @@
+services:
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-ssl
+    environment:      
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_AGENT_ENABLED: "true"
+      MSSQL_ENABLE_HADR: "1"
+      TZ: Asia/Manila
+    ports:
+      - ${MSSQL_PORT}:1433
+    volumes:
+      - ./mssql-data:/var/opt/mssql/data
+      - ./mssql.conf:/var/opt/mssql/mssql.conf
+      - ./ssl-certificate/fullchain.pem:/ssl/fullchain.pem:ro
+      - ./ssl-certificate/privkey.pem:/ssl/privkey.pem:ro
+    depends_on:
+      - certbot
+      - ssl-installer
+
+
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    environment:
+      - CERTBOT_EMAIL=${CERTBOT_EMAIL}
+      - CERTBOT_DOMAIN=${CERTBOT_DOMAIN}
+    volumes:
+      - ./certbot-data:/etc/letsencrypt
+    command: >
+      certonly --manual --preferred-challenges dns 
+               --agree-tos 
+               --email ${CERTBOT_EMAIL} 
+               --keep-until-expiring
+               --expand 
+               -d ${CERTBOT_DOMAIN}
+    restart: "no"
+
+
+
+  ssl-installer:
+    image: busybox
+    container_name: mssql-ssl-installer
+    entrypoint: >
+      /bin/sh -c "
+      cp -n /etc/letsencrypt/live/${CERTBOT_DOMAIN}/fullchain.pem /ssl && 
+      cp -n /etc/letsencrypt/live/${CERTBOT_DOMAIN}/privkey.pem /ssl &&
+      chmod 600 /ssl/*.pem &&
+      chown 10001:10001 /ssl/fullchain.pem &&
+      chown 10001:10001 /ssl/privkey.pem;"
+    volumes:
+      - ./certbot-data:/etc/letsencrypt
+      - ./ssl-certificate:/ssl
+    restart: "no"

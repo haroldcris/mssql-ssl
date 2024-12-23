@@ -1,0 +1,4 @@
+certbot-data
+mssql-data
+ssl-certificate
+.env
